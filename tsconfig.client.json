@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "lib/client",
+    "rootDir": "src/client",
+    "declaration": false,
+    "declarationMap": false,
+    "composite": false,
+    "incremental": false,
+    "types": []
+  },
+  "include": ["src/client/**/*"],
+  "exclude": ["node_modules", "lib", "dist"]
+}
