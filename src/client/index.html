@@ -4,6 +4,18 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>DSH Mirror</title>
+  <script>
+    // No-FOUC theme bootstrap: resolve before first paint.
+    (function () {
+      var theme = 'light'
+      try {
+        var stored = window.localStorage.getItem('dsh-mirror-theme')
+        if (stored === 'light' || stored === 'dark') theme = stored
+        else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) theme = 'dark'
+      } catch (e) { /* storage unavailable — system default above */ }
+      document.documentElement.setAttribute('data-theme', theme)
+    })()
+  </script>
 </head>
 <body>
   <div id="root"></div>

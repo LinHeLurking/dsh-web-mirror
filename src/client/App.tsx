@@ -1,79 +1,126 @@
-import { useEffect, useState } from 'react'
-import type { MirrorTopic, MirrorWorkspace, TopicsResponse } from './types.js'
-import { SessionView } from './SessionView.js'
+import { useCallback, useEffect, useState } from 'react'
+import type { MirrorTopic, TopicsResponse } from './types.js'
+import { fetchTopics, useSessionEvents } from './api.js'
+import { useHashRoute } from './router.js'
+import { useTheme } from './theme.js'
+import { Sidebar } from './components/Sidebar.js'
+import { Timeline } from './components/Timeline.js'
+import { displayTitle } from './components/SessionListItem.js'
+import { DotIcon, InboxIcon } from './components/icons.js'
 
-interface GroupedTopics {
-  workspace: MirrorWorkspace | null
-  topics: MirrorTopic[]
-}
+const INDEX_POLL_MS = 30_000
 
 export function App() {
-  const [data, setData] = useState<TopicsResponse | null>(null)
-  const [selected, setSelected] = useState<string | null>(null)
+  const [route, navigate] = useHashRoute()
+  const [theme, toggleTheme] = useTheme()
+  const [index, setIndex] = useState<TopicsResponse | null>(null)
+  const [indexError, setIndexError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/topics')
-      .then((r) => r.json())
-      .then(setData)
+    let disposed = false
+    let inFlight = false
+    const load = async () => {
+      if (inFlight) return
+      inFlight = true
+      try {
+        const data = await fetchTopics()
+        if (!disposed) {
+          setIndex(data)
+          setIndexError(null)
+        }
+      } catch (e) {
+        if (!disposed) setIndexError(String(e))
+      } finally {
+        inFlight = false
+      }
+    }
+    void load()
+    const timer = setInterval(() => {
+      if (!document.hidden) void load()
+    }, INDEX_POLL_MS)
+    return () => {
+      disposed = true
+      clearInterval(timer)
+    }
   }, [])
 
-  if (selected) {
-    return <SessionView topicId={selected} onBack={() => setSelected(null)} />
-  }
-
-  if (!data) return <div className="loading">Loading…</div>
-
-  const groups = groupByWorkspace(data.topics, data.workspaces)
+  const activeTopicId = route.name === 'session' ? route.topicId : null
+  const onSelect = useCallback(
+    (id: string) => navigate({ name: 'session', topicId: id }),
+    [navigate],
+  )
 
   return (
-    <div className="page">
-      <header>
-        <h1>DSH Mirror</h1>
-        <p className="subtitle">Read-only. No auth. No write paths.</p>
-      </header>
-      {groups.map((g) => (
-        <section key={g.workspace?.id ?? '__ungrouped'}>
-          <h2>
-            {g.workspace ? g.workspace.title || g.workspace.path : 'Ungrouped'}
-            {g.workspace?.path && <span className="path">{g.workspace.path}</span>}
-          </h2>
-          <ul className="topic-list">
-            {g.topics.map((t) => (
-              <li key={t.id}>
-                <a href="#" onClick={(e) => { e.preventDefault(); setSelected(t.id) }}>
-                  {t.title}
-                </a>
-                <span className={`badge ${t.running ? 'running' : ''}`}>
-                  {t.running ? 'live' : 'cold'}
-                </span>
-                <time>{new Date(t.updatedAt).toLocaleString()}</time>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-      {groups.length === 0 && <p className="empty">No sessions to mirror.</p>}
+    <div className="shell">
+      <Sidebar
+        workspaces={index?.workspaces ?? null}
+        topics={index?.topics ?? null}
+        loading={!index && !indexError}
+        activeTopicId={activeTopicId}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        onSelect={onSelect}
+      />
+      <main className="content">
+        {route.name === 'session' ? (
+          <SessionPage topicId={route.topicId} topics={index?.topics ?? null} />
+        ) : (
+          <Welcome topicCount={index?.topics.length ?? null} error={indexError} />
+        )}
+      </main>
     </div>
   )
 }
 
-function groupByWorkspace(topics: MirrorTopic[], workspaces: MirrorWorkspace[]): GroupedTopics[] {
-  const groups: GroupedTopics[] = []
-  const buckets = new Map<string | null, MirrorTopic[]>()
+/** Overview route: welcome / empty state. */
+function Welcome({ topicCount, error }: { topicCount: number | null; error: string | null }) {
+  return (
+    <div className="welcome">
+      <InboxIcon size={32} className="welcome-icon" />
+      <h1>DSH Mirror</h1>
+      <p>
+            A read-only mirror of DeepSeek Harness sessions.
+            {topicCount !== null && topicCount > 0
+              ? ` ${topicCount} session${topicCount === 1 ? '' : 's'} mirrored — pick one from the sidebar.`
+              : ''}
+      </p>
+      {error ? <p className="error-text">Failed to load the session index: {error}</p> : null}
+      <p className="welcome-hint">
+        Shareable links: <code>#/s/&lt;sessionId&gt;</code>
+      </p>
+    </div>
+  )
+}
 
-  for (const t of topics) {
-    const key = t.workspaceId ?? null
-    if (!buckets.has(key)) buckets.set(key, [])
-    buckets.get(key)!.push(t)
-  }
+/** Session detail route: header + live timeline. */
+function SessionPage({ topicId, topics }: { topicId: string; topics: MirrorTopic[] | null }) {
+  const { events, loading, error, connected } = useSessionEvents(topicId)
+  const topic = topics?.find((t) => t.id === topicId)
+  const title = topic ? displayTitle(topic.title) : displayTitle(topicId)
 
-  // Ordered: workspaces in registry order, then ungrouped.
-  for (const w of workspaces) {
-    const items = buckets.get(w.id)
-    if (items?.length) groups.push({ workspace: w, topics: items })
-  }
-  const ungrouped = buckets.get(null)
-  if (ungrouped?.length) groups.push({ workspace: null, topics: ungrouped })
+  useEffect(() => {
+    document.title = `${title} · DSH Mirror`
+    return () => {
+      document.title = 'DSH Mirror'
+    }
+  }, [title])
 
-  return groups
+  return (
+    <div className="session-page">
+      <header className="session-header">
+        <DotIcon
+          size={8}
+          className={`sess-dot ${topic?.running ? 'live' : 'cold'}`}
+          title={`${topic?.running ? 'Live session' : 'Cold (persisted) session'} · stream ${connected ? 'connected' : 'disconnected'}`}
+        />
+        <h1 title={topicId}>{title}</h1>
+        <span className="session-meta">
+          {events.length} event{events.length === 1 ? '' : 's'}
+          {topic?.workspacePath ? ` · ${topic.workspacePath}` : ''}
+        </span>
+      </header>
+      {error ? <div className="error-banner">Error loading history: {error}</div> : null}
+      <Timeline events={events} loading={loading} />
+    </div>
+  )
 }
