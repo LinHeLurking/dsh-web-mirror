@@ -1,0 +1,11 @@
+# 本地测试补丁：把 web-mirror 插件叠加进 dsh web profile。
+# 用 `dsh web --patch /Users/leici/workspace/dsh-web-mirror/cordis.patch.yml` 启动时生效；
+# 或把这段 insert 合并进 ~/.dsh/profiles/web/cordis.patch.yml 让当前实例热加载。
+#
+# name 用绝对路径，避免依赖 ~/.dsh/profiles/web/node_modules 里的解析。
+- insert:
+    - id: web-mirror
+      name: /Users/leici/workspace/dsh-web-mirror/lib/index.js
+      config:
+        host: '127.0.0.1'
+        port: 3180

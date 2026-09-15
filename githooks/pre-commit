@@ -1,0 +1,21 @@
+#!/bin/sh
+# pre-commit: rebuild the server bundle into lib/ and stage it, so the
+# committed lib/ always matches src/. lib/ is tracked on purpose (consumers
+# get build artifacts straight from the repo).
+#
+# Installed via core.hooksPath=githooks (see scripts/install-hooks.sh).
+
+set -eu
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+if [ ! -x node_modules/.bin/tsc ]; then
+  echo "pre-commit: node_modules/.bin/tsc not found — run 'pnpm install' (or npm install) first" >&2
+  exit 1
+fi
+
+echo "pre-commit: building server (tsc -p tsconfig.server.json)"
+node_modules/.bin/tsc -p tsconfig.server.json
+
+git add lib/

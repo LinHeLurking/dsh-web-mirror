@@ -14,6 +14,8 @@ export declare class MirrorServer {
     constructor(config: Config, source: MirrorDataSource, rules: FilterRules);
     listen(): Promise<void>;
     private handle;
+    /** Serve the vite-built index.html, which references the hashed assets. */
+    private serveIndex;
     private serveStatic;
     private handleTopics;
     private handleHistory;

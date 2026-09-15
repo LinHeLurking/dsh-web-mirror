@@ -1,4 +1,7 @@
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http'
+import { readFile } from 'node:fs/promises'
+import { join, normalize, resolve, sep } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type { MirrorDataSource } from './adapter.js'
 import type { Config, FilterRules } from './config.js'
 import { isTopicVisible } from './config.js'
@@ -30,21 +33,8 @@ function send404(res: ServerResponse): void {
   res.end('Not Found')
 }
 
-const INDEX_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DSH Mirror</title>
-  <!-- vite-built assets are injected here by the build -->
-  <script type="module" crossorigin src="/assets/index.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index.css">
-</head>
-<body>
-  <div id="root"></div>
-</body>
-</html>
-`
+/** Directory holding the vite-built client (index.html + hashed assets). */
+const CLIENT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '../dist/client')
 
 /**
  * Read-only mirror HTTP server on its own port. No auth, no write paths.
@@ -82,11 +72,10 @@ export class MirrorServer {
 
     try {
       if (path === '/') {
-        res.writeHead(200, HTML_HEADERS)
-        res.end(INDEX_HTML)
+        await this.serveIndex(res)
         return
       }
-      // Static vite build assets
+      // Static vite build assets (content-hashed filenames)
       if (path.startsWith('/assets/')) {
         await this.serveStatic(path, res)
         return
@@ -111,13 +100,24 @@ export class MirrorServer {
     }
   }
 
+  /** Serve the vite-built index.html, which references the hashed assets. */
+  private async serveIndex(res: ServerResponse): Promise<void> {
+    try {
+      const data = await readFile(join(CLIENT_ROOT, 'index.html'))
+      res.writeHead(200, HTML_HEADERS)
+      res.end(data)
+    } catch {
+      send404(res)
+    }
+  }
+
   private async serveStatic(path: string, res: ServerResponse): Promise<void> {
     try {
-      const { readFile } = await import('node:fs/promises')
-      const { join, resolve } = await import('node:path')
-      const { fileURLToPath } = await import('node:url')
-      const root = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../dist/client')
-      const filePath = join(root, path)
+      const filePath = normalize(join(CLIENT_ROOT, path))
+      if (filePath !== CLIENT_ROOT && !filePath.startsWith(CLIENT_ROOT + sep)) {
+        send404(res)
+        return
+      }
       const data = await readFile(filePath)
       const contentType = path.endsWith('.css')
         ? 'text/css'
