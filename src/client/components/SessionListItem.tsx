@@ -8,6 +8,7 @@ import { DotIcon } from './icons.js'
  * → `session-2146…ae1c`. Real titles pass through, capped at 40 chars.
  */
 export function displayTitle(title: string): string {
+  if (!title) return '(untitled)'
   const m = /^(session-[0-9a-f]{4})[0-9a-f-]*([0-9a-f]{4})$/i.exec(title)
   if (m) return `${m[1]}…${m[2]}`
   return title.length > 40 ? `${title.slice(0, 39)}…` : title

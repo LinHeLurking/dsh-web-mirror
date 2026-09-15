@@ -49,14 +49,17 @@ export function Sidebar({
   const groups = useMemo(() => {
     if (!topics || !workspaces) return []
     const q = filter.trim().toLowerCase()
+    // Defensive: drop malformed topics with no usable id before they reach
+    // key/href rendering (the adapter filters these, but don't trust the wire).
+    const usable = topics.filter((t) => typeof t.id === 'string' && t.id.length > 0)
     const filtered = q
-      ? topics.filter(
+      ? usable.filter(
           (t) =>
-            t.title.toLowerCase().includes(q) ||
-            t.id.toLowerCase().includes(q) ||
+            (t.title ?? '').toLowerCase().includes(q) ||
+            (t.id ?? '').toLowerCase().includes(q) ||
             (t.workspacePath?.toLowerCase().includes(q) ?? false),
         )
-      : topics
+      : usable
     return groupByWorkspace(filtered, workspaces)
   }, [topics, workspaces, filter])
 
