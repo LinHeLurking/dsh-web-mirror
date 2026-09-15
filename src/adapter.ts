@@ -79,16 +79,21 @@ declare module '@deepseek-ai/cordis' {
  * wire events into MirrorEvents. The only file that knows about DSH
  * shapes — if the upstream wire changes, only this file adapts.
  */
+/**
+ * Cached per-session facts we can only learn by reading the cold log.
+ * DSH's persisted `SessionHeader` carries no title and `persistence.list()`
+ * deliberately refuses to read event logs, so anything derived from the
+ * log needs our own scan. Cached forever in-process — a cold session that
+ * gets re-opened with new events transitions to the live path, which
+ * re-reads its own state.
+ */
+interface ColdSessionFacts {
+  title: string | null
+  hasUserMessage: boolean
+}
+
 export class MirrorDataSource {
-  /**
-   * Memoized cold-topic titles, keyed by sessionId. DSH's persisted
-   * `SessionHeader` carries no title, so the only honest source for a cold
-   * session is the `session/title` event inside its event log. We read the
-   * log once per cold session and cache — if the session resumes and
-   * changes title, it becomes a live session and the live-projection path
-   * takes over.
-   */
-  private coldTitleCache = new Map<string, string>()
+  private coldFactsCache = new Map<string, ColdSessionFacts>()
 
   constructor(private ctx: Context, private rules: FilterRules) {}
 
@@ -120,6 +125,17 @@ export class MirrorDataSource {
       if (typeof s.sessionId !== 'string' || s.sessionId.length === 0) continue
       if (!isTopicVisible(s.sessionId, this.rules)) continue
       seen.add(s.sessionId)
+      // Hide live sessions that haven't seen a user message yet — matches
+      // the cold-topic rule and keeps sidebar entries meaningful. We don't
+      // cache this because live sessions can transition to having-messages
+      // at any moment. If the sessions service can't give us a live handle
+      // right now, err on the side of keeping the topic visible rather than
+      // dropping a potentially real conversation.
+      const live = sessionsSvc?.get(s.sessionId)
+      if (live) {
+        const events = live.snapshotEvents() ?? []
+        if (!events.some((ev) => ev.type === 'user/message')) continue
+      }
       const ws = workspaceBySession.get(s.sessionId)
       // Live sessions: the title projection (folded from `session/title`
       // events by dsh-session-title) is the only log-free title source.
@@ -142,22 +158,24 @@ export class MirrorDataSource {
     if (persistence) {
       try {
         const persisted = await persistence.list()
-        // Resolve titles for cold sessions in parallel — each is a single
-        // log scan and the results are memoized, so subsequent /topics
-        // calls cost nothing.
-        const coldTopics = await Promise.all(
+        // Resolve cold sessions in parallel — each is a single log scan
+        // and the results are memoized, so subsequent /topics calls cost
+        // nothing. Cold topics with no user messages are dropped: an
+        // empty session is pure noise in the sidebar.
+        const scanned = await Promise.all(
           persisted
             .filter((p) => {
               const sid = p.header.id
               return !seen.has(sid) && isTopicVisible(sid, this.rules)
             })
-            .map(async (p): Promise<MirrorTopic> => {
+            .map(async (p): Promise<MirrorTopic | null> => {
               const sid = p.header.id
               const ws = workspaceBySession.get(sid)
-              const title = await this.resolveColdTitle(sid)
+              const facts = await this.analyzeColdSession(sid)
+              if (!facts.hasUserMessage) return null
               return {
                 id: sid,
-                title,
+                title: facts.title ?? sid,
                 workspaceId: ws?.id,
                 workspacePath: ws?.path ?? p.header.cwd,
                 updatedAt: p.header.createdAt,
@@ -165,7 +183,9 @@ export class MirrorDataSource {
               }
             })
         )
-        topics.push(...coldTopics)
+        for (const t of scanned) {
+          if (t !== null) topics.push(t)
+        }
       } catch {
         // Persistence listing is best-effort; a cold reader failure
         // must not take down the mirror index.
@@ -177,30 +197,44 @@ export class MirrorDataSource {
   }
 
   /**
-   * Look up the title of a cold session by scanning its event log for the
-   * first `session/title` event. Falls back to the raw sessionId when no
-   * title was ever recorded (or the log can't be read). Memoized — a cold
-   * session's title is immutable from the mirror's point of view.
+   * Scan a cold session's event log once and extract everything the mirror
+   * needs from it: the title (the first `session/title` event's `title`
+   * field, if any) and whether any user message was ever posted. Sessions
+   * that were opened but never typed into produce no user/message events
+   * and should be hidden from the sidebar.
+   *
+   * On a read failure we assume the session is interesting (`hasUserMessage:
+   * true`) — silently dropping a real conversation because the disk hiccuped
+   * is worse than occasionally showing an empty one.
    */
-  private async resolveColdTitle(sessionId: string): Promise<string> {
-    const cached = this.coldTitleCache.get(sessionId)
+  private async analyzeColdSession(sessionId: string): Promise<ColdSessionFacts> {
+    const cached = this.coldFactsCache.get(sessionId)
     if (cached !== undefined) return cached
-    let title = sessionId
+    let facts: ColdSessionFacts
     try {
       const events = await this.getEvents(sessionId)
+      let title: string | null = null
+      let hasUserMessage = false
       for (const ev of events) {
-        if (ev.kind !== 'session/title') continue
-        const data = ev.data as { title?: unknown } | null | undefined
-        if (data && typeof data.title === 'string' && data.title.length > 0) {
-          title = data.title
-          break
+        if (ev.kind === 'user/message') {
+          hasUserMessage = true
+          if (title !== null) break
+          continue
+        }
+        if (title === null && ev.kind === 'session/title') {
+          const data = ev.data as { title?: unknown } | null | undefined
+          if (data && typeof data.title === 'string' && data.title.length > 0) {
+            title = data.title
+            if (hasUserMessage) break
+          }
         }
       }
+      facts = { title, hasUserMessage }
     } catch {
-      // Fall through — keep the sessionId as title.
+      facts = { title: null, hasUserMessage: true }
     }
-    this.coldTitleCache.set(sessionId, title)
-    return title
+    this.coldFactsCache.set(sessionId, facts)
+    return facts
   }
 
   async getEvents(sessionId: string): Promise<MirrorEvent[]> {

@@ -79,35 +79,27 @@ declare module '@deepseek-ai/cordis' {
         workspaceRegistry?: WorkspaceRegistryService;
     }
 }
-/**
- * Data source adapter. Talks to DSH's injected services and translates
- * wire events into MirrorEvents. The only file that knows about DSH
- * shapes — if the upstream wire changes, only this file adapts.
- */
 export declare class MirrorDataSource {
     private ctx;
     private rules;
-    /**
-     * Memoized cold-topic titles, keyed by sessionId. DSH's persisted
-     * `SessionHeader` carries no title, so the only honest source for a cold
-     * session is the `session/title` event inside its event log. We read the
-     * log once per cold session and cache — if the session resumes and
-     * changes title, it becomes a live session and the live-projection path
-     * takes over.
-     */
-    private coldTitleCache;
+    private coldFactsCache;
     constructor(ctx: Context, rules: FilterRules);
     listTopics(): Promise<{
         workspaces: MirrorWorkspace[];
         topics: MirrorTopic[];
     }>;
     /**
-     * Look up the title of a cold session by scanning its event log for the
-     * first `session/title` event. Falls back to the raw sessionId when no
-     * title was ever recorded (or the log can't be read). Memoized — a cold
-     * session's title is immutable from the mirror's point of view.
+     * Scan a cold session's event log once and extract everything the mirror
+     * needs from it: the title (the first `session/title` event's `title`
+     * field, if any) and whether any user message was ever posted. Sessions
+     * that were opened but never typed into produce no user/message events
+     * and should be hidden from the sidebar.
+     *
+     * On a read failure we assume the session is interesting (`hasUserMessage:
+     * true`) — silently dropping a real conversation because the disk hiccuped
+     * is worse than occasionally showing an empty one.
      */
-    private resolveColdTitle;
+    private analyzeColdSession;
     getEvents(sessionId: string): Promise<MirrorEvent[]>;
 }
 export {};
