@@ -19,12 +19,32 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
 }
 
-/** Pull the .text strings out of a DSH ContentBlock[]-ish array. */
+/**
+ * Pull the .text strings out of a DSH ContentBlock[]-ish array.
+ * Skips non-text blocks entirely — `tool-call` / `tool_use` / tool-result
+ * payloads belong to ToolCallRow, never to markdown rendering. Falling
+ * through here means "no readable text", NOT "render the wire JSON".
+ */
+const NON_TEXT_BLOCK_TYPES = new Set([
+  // Tool invocations — ToolCallRow already renders these as its own row.
+  'tool-call',
+  'tool_call',
+  'tool_use',
+  'tool-result',
+  'tool_result',
+  'function_call',
+  'function-result',
+  // Model internal monologue — not part of the user-facing reply.
+  'reasoning',
+  'thinking',
+])
 function blocksToText(blocks: unknown[]): string {
   return blocks
     .map((b) => {
       if (typeof b === 'string') return b
       if (isRecord(b)) {
+        const type = b['type']
+        if (typeof type === 'string' && NON_TEXT_BLOCK_TYPES.has(type)) return ''
         const text = b['text']
         if (typeof text === 'string') return text
       }
@@ -37,11 +57,13 @@ function blocksToText(blocks: unknown[]): string {
 /**
  * Best-effort plain-text extraction from any message-ish payload.
  * Handles strings, {content|message|text}, ContentBlock arrays, and the
- * DSH assistant envelope { message: { content } }. Falls back to JSON.
+ * DSH assistant envelope { message: { content } }. Returns '' when the
+ * payload carries no readable text (e.g. pure tool-call messages). Never
+ * falls back to safeJson — the wire envelope is not a reading surface.
  */
 export function extractText(data: unknown): string {
   if (typeof data === 'string') return data
-  if (Array.isArray(data)) return blocksToText(data) || safeJson(data)
+  if (Array.isArray(data)) return blocksToText(data)
   if (isRecord(data)) {
     // Envelope: { message: { content: [...] } } or { message: "…" }
     const msg = data['message']
@@ -52,12 +74,8 @@ export function extractText(data: unknown): string {
     }
     const content = data['content'] ?? data['text']
     if (typeof content === 'string') return content
-    if (Array.isArray(content)) {
-      const text = blocksToText(content)
-      if (text) return text
-    }
-    if (msg !== undefined) return '' // had an envelope we could not read
-    return safeJson(data)
+    if (Array.isArray(content)) return blocksToText(content)
+    return ''
   }
   return String(data)
 }
@@ -164,8 +182,14 @@ export const MessageItem = memo(function MessageItem({ role, events }: MessageIt
   const text = isAssistant ? events.map((ev) => extractText(ev.data)).join('') : extractText(first?.data)
   const label = isAssistant ? 'Assistant' : 'User'
 
-  if (!text.trim() && events.length > 0) {
-    // Payload had no readable text — render as a system-style JSON row instead.
+  if (!text.trim()) {
+    // Assistant messages whose only payload is tool-call blocks: the
+    // ToolCallRow immediately after already shows them. Render nothing here
+    // so we don't double-display the call as a JSON dump.
+    if (isAssistant) return null
+    if (events.length === 0) return null
+    // Non-assistant messages with unreadable payloads still need a system
+    // row fallback so the wire data isn't silently swallowed.
     return (
       <div className="row row-system">
         <div className="row-meta">
