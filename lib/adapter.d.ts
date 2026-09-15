@@ -35,7 +35,18 @@ interface SessionWireEvent {
     readonly ignorable?: true;
 }
 interface SessionHandle {
-    snapshotEvents(fromSeq?: number, toSeqExclusive?: number): SessionWireEvent[];
+    /**
+     * Read a slice of the valid contiguous event log. `read(0)` returns the
+     * full prefix. Used instead of a "snapshotEvents" convenience — the
+     * upstream `SessionHandle` interface only exposes `read(offset, length)`,
+     * and calling anything else crashes the cold path silently (caught and
+     * swallowed below), yielding an empty timeline.
+     */
+    read(offset?: number, length?: number): Promise<{
+        events: SessionWireEvent[];
+    }>;
+    /** Release the handle. */
+    close(): Promise<void>;
 }
 interface SessionsService {
     list(): SessionSummary[];
@@ -76,11 +87,27 @@ declare module '@deepseek-ai/cordis' {
 export declare class MirrorDataSource {
     private ctx;
     private rules;
+    /**
+     * Memoized cold-topic titles, keyed by sessionId. DSH's persisted
+     * `SessionHeader` carries no title, so the only honest source for a cold
+     * session is the `session/title` event inside its event log. We read the
+     * log once per cold session and cache — if the session resumes and
+     * changes title, it becomes a live session and the live-projection path
+     * takes over.
+     */
+    private coldTitleCache;
     constructor(ctx: Context, rules: FilterRules);
     listTopics(): Promise<{
         workspaces: MirrorWorkspace[];
         topics: MirrorTopic[];
     }>;
+    /**
+     * Look up the title of a cold session by scanning its event log for the
+     * first `session/title` event. Falls back to the raw sessionId when no
+     * title was ever recorded (or the log can't be read). Memoized — a cold
+     * session's title is immutable from the mirror's point of view.
+     */
+    private resolveColdTitle;
     getEvents(sessionId: string): Promise<MirrorEvent[]>;
 }
 export {};

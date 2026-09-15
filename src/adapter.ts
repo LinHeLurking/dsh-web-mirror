@@ -40,7 +40,16 @@ interface SessionWireEvent {
 }
 
 interface SessionHandle {
-  snapshotEvents(fromSeq?: number, toSeqExclusive?: number): SessionWireEvent[]
+  /**
+   * Read a slice of the valid contiguous event log. `read(0)` returns the
+   * full prefix. Used instead of a "snapshotEvents" convenience — the
+   * upstream `SessionHandle` interface only exposes `read(offset, length)`,
+   * and calling anything else crashes the cold path silently (caught and
+   * swallowed below), yielding an empty timeline.
+   */
+  read(offset?: number, length?: number): Promise<{ events: SessionWireEvent[] }>
+  /** Release the handle. */
+  close(): Promise<void>
 }
 
 interface SessionsService {
@@ -71,6 +80,16 @@ declare module '@deepseek-ai/cordis' {
  * shapes — if the upstream wire changes, only this file adapts.
  */
 export class MirrorDataSource {
+  /**
+   * Memoized cold-topic titles, keyed by sessionId. DSH's persisted
+   * `SessionHeader` carries no title, so the only honest source for a cold
+   * session is the `session/title` event inside its event log. We read the
+   * log once per cold session and cache — if the session resumes and
+   * changes title, it becomes a live session and the live-projection path
+   * takes over.
+   */
+  private coldTitleCache = new Map<string, string>()
+
   constructor(private ctx: Context, private rules: FilterRules) {}
 
   async listTopics(): Promise<{ workspaces: MirrorWorkspace[]; topics: MirrorTopic[] }> {
@@ -123,21 +142,30 @@ export class MirrorDataSource {
     if (persistence) {
       try {
         const persisted = await persistence.list()
-        for (const p of persisted) {
-          const sid = p.header.id
-          if (seen.has(sid) || !isTopicVisible(sid, this.rules)) continue
-          const ws = workspaceBySession.get(sid)
-          // The persisted SessionHeader has no title field, and list()
-          // deliberately avoids reading logs — cold topics show the id.
-          topics.push({
-            id: sid,
-            title: sid,
-            workspaceId: ws?.id,
-            workspacePath: ws?.path ?? p.header.cwd,
-            updatedAt: p.header.createdAt,
-            running: false,
-          })
-        }
+        // Resolve titles for cold sessions in parallel — each is a single
+        // log scan and the results are memoized, so subsequent /topics
+        // calls cost nothing.
+        const coldTopics = await Promise.all(
+          persisted
+            .filter((p) => {
+              const sid = p.header.id
+              return !seen.has(sid) && isTopicVisible(sid, this.rules)
+            })
+            .map(async (p): Promise<MirrorTopic> => {
+              const sid = p.header.id
+              const ws = workspaceBySession.get(sid)
+              const title = await this.resolveColdTitle(sid)
+              return {
+                id: sid,
+                title,
+                workspaceId: ws?.id,
+                workspacePath: ws?.path ?? p.header.cwd,
+                updatedAt: p.header.createdAt,
+                running: false,
+              }
+            })
+        )
+        topics.push(...coldTopics)
       } catch {
         // Persistence listing is best-effort; a cold reader failure
         // must not take down the mirror index.
@@ -146,6 +174,33 @@ export class MirrorDataSource {
 
     topics.sort((a, b) => b.updatedAt - a.updatedAt)
     return { workspaces, topics }
+  }
+
+  /**
+   * Look up the title of a cold session by scanning its event log for the
+   * first `session/title` event. Falls back to the raw sessionId when no
+   * title was ever recorded (or the log can't be read). Memoized — a cold
+   * session's title is immutable from the mirror's point of view.
+   */
+  private async resolveColdTitle(sessionId: string): Promise<string> {
+    const cached = this.coldTitleCache.get(sessionId)
+    if (cached !== undefined) return cached
+    let title = sessionId
+    try {
+      const events = await this.getEvents(sessionId)
+      for (const ev of events) {
+        if (ev.kind !== 'session/title') continue
+        const data = ev.data as { title?: unknown } | null | undefined
+        if (data && typeof data.title === 'string' && data.title.length > 0) {
+          title = data.title
+          break
+        }
+      }
+    } catch {
+      // Fall through — keep the sessionId as title.
+    }
+    this.coldTitleCache.set(sessionId, title)
+    return title
   }
 
   async getEvents(sessionId: string): Promise<MirrorEvent[]> {
@@ -160,11 +215,23 @@ export class MirrorDataSource {
 
     const persistence = this.ctx.sessionPersistence
     if (persistence) {
+      let handle: SessionHandle | undefined
       try {
-        const handle = await persistence.open(sessionId, 'read')
-        return handle.snapshotEvents().map(wireToMirror)
+        handle = await persistence.open(sessionId, 'read')
+        const { events } = await handle.read()
+        return events.map(wireToMirror)
       } catch {
         return []
+      } finally {
+        // Always release the read handle — even on a throw, otherwise the
+        // persistence tracker keeps a slot open for this session forever.
+        if (handle) {
+          try {
+            await handle.close()
+          } catch {
+            // Close is best-effort from our side.
+          }
+        }
       }
     }
     return []
