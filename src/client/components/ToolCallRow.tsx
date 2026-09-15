@@ -17,6 +17,9 @@ export const ToolCallRow = memo(function ToolCallRow({
   result: MirrorEvent | null
 }) {
   const [open, setOpen] = useState(false)
+  // Secondary collapse: the raw call payload (JSON) is noisy — hide it by
+  // default; the rendered Result is the primary reading surface.
+  const [showCall, setShowCall] = useState(false)
   const c = extractToolCall(call.data)
   const r = result ? extractToolResult(result.data) : null
   const duration = result ? result.time - call.time : null
@@ -52,13 +55,24 @@ export const ToolCallRow = memo(function ToolCallRow({
         <TimeAgo time={call.time} className="tool-time" />
       </button>
       {open ? (
-        <div className="tool-panes">
+        <div className="tool-body">
+          <button
+            type="button"
+            className="tool-raw-toggle"
+            onClick={() => setShowCall((v) => !v)}
+            aria-expanded={showCall}
+          >
+            <ChevronIcon size={11} className={`raw-chevron${showCall ? ' open' : ''}`} />
+            {showCall ? 'Hide call payload' : 'Show call payload'}
+          </button>
+          {showCall ? (
+            <div className="tool-pane tool-pane-raw">
+              <div className="tool-pane-title">Call payload</div>
+              <pre className="json">{prettyJson(c.args ?? call.data)}</pre>
+            </div>
+          ) : null}
           <div className="tool-pane">
-            <div className="tool-pane-title">Call</div>
-            <pre className="json">{prettyJson(c.args ?? call.data)}</pre>
-          </div>
-          <div className="tool-pane">
-            <div className="tool-pane-title">{r ? (r.isError ? 'Result (error)' : 'Result') : 'Result'}</div>
+            <div className="tool-pane-title">{r && r.isError ? 'Result (error)' : 'Result'}</div>
             {r ? (
               <pre className="json">{looksLikeJson(r.text) ? prettyJson(r.text) : r.text}</pre>
             ) : (
@@ -93,7 +107,7 @@ export const ToolResultOrphan = memo(function ToolResultOrphan({ event }: { even
         <TimeAgo time={event.time} className="tool-time" />
       </button>
       {open ? (
-        <div className="tool-panes">
+        <div className="tool-body">
           <div className="tool-pane">
             <div className="tool-pane-title">Result</div>
             <pre className="json">{looksLikeJson(r.text) ? prettyJson(r.text) : r.text}</pre>
@@ -118,7 +132,7 @@ export const SystemRow = memo(function SystemRow({ event }: { event: MirrorEvent
         <TimeAgo time={event.time} className="tool-time" />
       </button>
       {open ? (
-        <div className="tool-panes">
+        <div className="tool-body">
           <div className="tool-pane">
             <div className="tool-pane-title">Payload</div>
             <pre className="json">{safeJson(event.data)}</pre>

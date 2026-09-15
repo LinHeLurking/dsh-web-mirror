@@ -609,14 +609,46 @@ button {
   color: var(--fg-2);
 }
 
-.tool-panes {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+/* Body under an expanded .tool-summary. Stacks the optional raw call
+   payload (secondary-collapse, hidden by default) above the primary Result
+   pane. Formerly .tool-panes (side-by-side grid) — call payload moved into
+   a secondary fold so the Result can take the full reading width. */
+.tool-body {
+  display: flex;
+  flex-direction: column;
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-2) var(--sp-3) calc(var(--sp-2) + 14px);
 }
-.tool-panes:has(.tool-pane:only-child) {
-  grid-template-columns: 1fr;
+
+/* Secondary-collapse toggle for the raw call payload. Quiet text button —
+   we don't want this to compete visually with the Result pane. */
+.tool-raw-toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.tool-raw-toggle:hover {
+  background: var(--bg-1);
+  color: var(--fg-1);
+}
+
+/* Chevron rotation is handled per-row so nested collapses don't fight over
+   the .tool.open parent selector. */
+.raw-chevron {
+  flex-shrink: 0;
+  color: var(--fg-2);
+  transition: transform 0.12s ease;
+}
+.raw-chevron.open {
+  transform: rotate(90deg);
 }
 
 .tool-pane {
@@ -625,6 +657,13 @@ button {
   border-radius: var(--radius-md);
   background: var(--bg-1);
   overflow: hidden;
+}
+
+/* Raw JSON pane is a diagnostic surface, not a reading surface: cap its
+   height so it can't swallow the screen when opened. */
+.tool-pane-raw .json {
+  max-height: 320px;
+  overflow: auto;
 }
 
 .tool-pane-title {
@@ -806,9 +845,6 @@ button {
     max-height: 40vh;
     border-right: none;
     border-bottom: 1px solid var(--border-0);
-  }
-  .tool-panes {
-    grid-template-columns: 1fr;
   }
   .session-meta {
     display: none;
