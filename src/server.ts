@@ -86,7 +86,7 @@ export class MirrorServer {
       }
       const historyMatch = path.match(/^\/topics\/([^/]+)\/history$/)
       if (historyMatch) {
-        await this.handleHistory(historyMatch[1]!, res)
+        await this.handleHistory(historyMatch[1]!, url.searchParams.get('after'), res)
         return
       }
       const eventsMatch = path.match(/^\/topics\/([^/]+)\/events$/)
@@ -137,13 +137,30 @@ export class MirrorServer {
     sendJson(res, 200, body)
   }
 
-  private async handleHistory(topicId: string, res: ServerResponse): Promise<void> {
+  private async handleHistory(topicId: string, afterParam: string | null, res: ServerResponse): Promise<void> {
     if (!isTopicVisible(topicId, this.rules)) {
       send404(res)
       return
     }
-    const events = await this.source.getEvents(topicId)
-    const body: HistoryResponse = { topicId, events }
+    // Incremental fetch: ?after=<seq> returns only events with seq > after.
+    let after = 0
+    if (afterParam !== null) {
+      if (!/^\d+$/.test(afterParam)) {
+        sendJson(res, 400, { error: 'Invalid `after` parameter: expected a non-negative integer' })
+        return
+      }
+      after = Number(afterParam)
+      if (!Number.isSafeInteger(after)) {
+        sendJson(res, 400, { error: 'Invalid `after` parameter: expected a non-negative integer' })
+        return
+      }
+    }
+    const all = await this.source.getEvents(topicId)
+    // Events arrive ordered by seq ascending — both the filter and the
+    // latest seq read rely on that invariant.
+    const events = afterParam === null ? all : all.filter((e) => e.seq > after)
+    const latestSeq = all.length > 0 ? all[all.length - 1]!.seq : 0
+    const body: HistoryResponse = { topicId, events, latestSeq }
     sendJson(res, 200, body)
   }
 

@@ -46,9 +46,11 @@ export interface TopicsResponse {
     workspaces: MirrorWorkspace[];
     topics: MirrorTopic[];
 }
-/** GET /topics/:id/history response */
+/** GET /topics/:id/history response (optionally narrowed with ?after=<seq>) */
 export interface HistoryResponse {
     topicId: string;
     events: MirrorEvent[];
+    /** Highest seq in the topic's full history (0 when empty) — the cursor to pass as `after` on the next incremental fetch. */
+    latestSeq: number;
 }
 //# sourceMappingURL=types.d.ts.map

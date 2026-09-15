@@ -6,12 +6,26 @@ import type { FilterRules } from './config.js';
  * These mirror the DSH service surfaces without a compile-time dependency
  * on the DSH monorepo: the plugin runs inside DSH's cordis runtime, which
  * injects these services at runtime. Structural typing keeps us honest.
+ *
+ * Narrowed upstream shapes (verified against dsh-api-session-controller
+ * and dsh-session / dsh-session-persistence `.d.ts`):
+ * - `SessionSummary.projections` mirrors `SessionProjectionHints`: a
+ *   partial, possibly stale cache of folded projections. The
+ *   dsh-session-title package folds `session/title` log events into the
+ *   `title` projection key (`string | null`), so this is the honest title
+ *   source for live sessions — absent when the cache has no entry.
+ * - The persisted `SessionHeader` (`{ id, version, createdAt, cwd?, ... }`)
+ *   has no title field at all, and `persistence.list()` explicitly avoids
+ *   reading event logs — so cold topics keep the sessionId as title.
  */
 interface SessionSummary {
     sessionId: string;
     updatedAt: number;
     running: boolean;
     cwd?: string;
+    projections?: {
+        values?: Readonly<Record<string, unknown>>;
+    };
 }
 interface SessionWireEvent {
     readonly type: string;
