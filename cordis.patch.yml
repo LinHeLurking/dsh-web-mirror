@@ -9,3 +9,15 @@
       config:
         host: '127.0.0.1'
         port: 3180
+
+# 启用 HMR 并监听本插件的编译产物。base 相对 profile 目录解析，故用绝对路径。
+# 改 src/ 后跑 `pnpm dev`（tsc --watch）刷新 lib/，hmr 检测到变化即重载插件：
+# dispose 旧 fiber（关 listener）→ 重新 apply（重新 listen），无需重启 dsh。
+# 注意：dsh 必须以 `node --expose-internals <bin.js>` 启动，否则 hmr 抛错。
+# 见 package.json 的 start:hmr 脚本。
+- id: hmr
+  disabled: false
+  config:
+    base: /Users/leici/workspace/dsh-web-mirror
+    root: ['lib']
+    debounce: 100

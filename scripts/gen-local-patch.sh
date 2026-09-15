@@ -8,8 +8,9 @@
 #   ./scripts/gen-local-patch.sh -               # print to stdout
 #   PORT=4280 ./scripts/gen-local-patch.sh       # override port
 #   HOST=0.0.0.0 ID=my-mirror ./scripts/gen-local-patch.sh
+#   HMR=0 ./scripts/gen-local-patch.sh           # omit the hmr overlay
 #
-# Then boot with:
+# Then boot with (HMR needs --expose-internals; see package.json start:hmr):
 #   dsh --profile web --patch "$(pwd)/cordis.patch.local.yml"
 
 set -eu
@@ -20,6 +21,7 @@ ENTRY="$ROOT/lib/index.js"
 ID="${ID:-web-mirror}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-3180}"
+HMR="${HMR:-1}"
 OUT="${1:-$ROOT/cordis.patch.local.yml}"
 
 if [ ! -f "$ENTRY" ]; then
@@ -30,6 +32,13 @@ fi
 yaml() {
   printf -- '- insert:\n    - id: %s\n      name: %s\n      config:\n        host: %s\n        port: %s\n' \
     "$ID" "$ENTRY" "$HOST" "$PORT"
+  # HMR: watch the compiled output so editing src/ + `pnpm dev` reloads the
+  # plugin in place. Requires dsh to be started via `node --expose-internals`.
+  # Disable with HMR=0.
+  if [ "$HMR" != '0' ]; then
+    printf -- '- id: hmr\n  disabled: false\n  config:\n    base: %s\n    root: [lib]\n    debounce: 100\n' \
+      "$ROOT"
+  fi
 }
 
 if [ "$OUT" = '-' ]; then

@@ -22,7 +22,10 @@
     "build:client": "vite build",
     "build:server": "tsc -p tsconfig.server.json",
     "check": "tsc --noEmit -p tsconfig.server.json && tsc --noEmit -p tsconfig.client.json",
-    "clean": "rm -rf lib dist"
+    "clean": "rm -rf lib dist",
+    "dev": "tsc -p tsconfig.server.json --watch --preserveWatchOutput",
+    "patch": "./scripts/gen-local-patch.sh",
+    "start:hmr": "./scripts/start-hmr.sh"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "^4.0.2",
