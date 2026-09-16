@@ -81,9 +81,13 @@ declare module '@deepseek-ai/cordis' {
 }
 export declare class MirrorDataSource {
     private ctx;
-    private rules;
+    private getRules;
     private coldFactsCache;
-    constructor(ctx: Context, rules: FilterRules);
+    /**
+     * `getRules` is a getter rather than a fixed value so runtime config
+     * updates (PUT /config) take effect on the next call without rewiring.
+     */
+    constructor(ctx: Context, getRules: () => FilterRules);
     listTopics(): Promise<{
         workspaces: MirrorWorkspace[];
         topics: MirrorTopic[];

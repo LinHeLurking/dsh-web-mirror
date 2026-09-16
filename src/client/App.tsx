@@ -4,6 +4,7 @@ import { fetchTopics, useSessionEvents } from './api.js'
 import { useHashRoute } from './router.js'
 import { useTheme } from './theme.js'
 import { Sidebar } from './components/Sidebar.js'
+import { SettingsPanel } from './components/SettingsPanel.js'
 import { Timeline } from './components/Timeline.js'
 import { displayTitle } from './components/SessionListItem.js'
 import { DotIcon, InboxIcon } from './components/icons.js'
@@ -15,6 +16,9 @@ export function App() {
   const [theme, toggleTheme] = useTheme()
   const [index, setIndex] = useState<TopicsResponse | null>(null)
   const [indexError, setIndexError] = useState<string | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const openSettings = useCallback(() => setSettingsOpen(true), [])
+  const closeSettings = useCallback(() => setSettingsOpen(false), [])
 
   useEffect(() => {
     let disposed = false
@@ -60,6 +64,7 @@ export function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onSelect={onSelect}
+        onOpenSettings={openSettings}
       />
       <main className="content">
         {route.name === 'session' ? (
@@ -68,6 +73,7 @@ export function App() {
           <Welcome topicCount={index?.topics.length ?? null} error={indexError} />
         )}
       </main>
+      <SettingsPanel open={settingsOpen} onClose={closeSettings} />
     </div>
   )
 }

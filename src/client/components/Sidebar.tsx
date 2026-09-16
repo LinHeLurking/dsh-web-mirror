@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { MirrorTopic, MirrorWorkspace } from '../types.js'
 import { SessionListItem } from './SessionListItem.js'
-import { ChevronIcon, MoonIcon, SearchIcon, SunIcon } from './icons.js'
+import { ChevronIcon, MoonIcon, SearchIcon, SettingsIcon, SunIcon } from './icons.js'
 
 interface Group {
   workspace: MirrorWorkspace | null
@@ -34,6 +34,7 @@ export function Sidebar({
   theme,
   onToggleTheme,
   onSelect,
+  onOpenSettings,
 }: {
   workspaces: MirrorWorkspace[] | null
   topics: MirrorTopic[] | null
@@ -42,6 +43,7 @@ export function Sidebar({
   theme: 'light' | 'dark'
   onToggleTheme: () => void
   onSelect: (id: string) => void
+  onOpenSettings: () => void
 }) {
   const [filter, setFilter] = useState('')
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set())
@@ -78,15 +80,26 @@ export function Sidebar({
         <a href="#/" className="brand">
           DSH Mirror
         </a>
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={onToggleTheme}
-          title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
-          aria-label="Toggle theme"
-        >
-          {theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}
-        </button>
+        <div className="sidebar-header-actions">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onOpenSettings}
+            title="Mirror settings"
+            aria-label="Mirror settings"
+          >
+            <SettingsIcon size={15} />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onToggleTheme}
+            title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label="Toggle theme"
+          >
+            {theme === 'dark' ? <SunIcon size={15} /> : <MoonIcon size={15} />}
+          </button>
+        </div>
       </header>
 
       <div className="sidebar-filter">

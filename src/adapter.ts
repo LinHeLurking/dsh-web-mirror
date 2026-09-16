@@ -95,12 +95,22 @@ interface ColdSessionFacts {
 export class MirrorDataSource {
   private coldFactsCache = new Map<string, ColdSessionFacts>()
 
-  constructor(private ctx: Context, private rules: FilterRules) {}
+  /**
+   * `getRules` is a getter rather than a fixed value so runtime config
+   * updates (PUT /config) take effect on the next call without rewiring.
+   */
+  constructor(
+    private ctx: Context,
+    private getRules: () => FilterRules,
+  ) {}
 
   async listTopics(): Promise<{ workspaces: MirrorWorkspace[]; topics: MirrorTopic[] }> {
     const workspacesSvc = this.ctx.workspaceRegistry
     const persistence = this.ctx.sessionPersistence
     const sessionsSvc = this.ctx.sessions
+    // Snapshot the rules once per call so one request sees a consistent
+    // filter set even if a config update lands mid-scan.
+    const rules = this.getRules()
 
     const workspaces: MirrorWorkspace[] = (workspacesSvc?.list() ?? []).map((w) => ({
       id: w.workspaceId,
@@ -123,7 +133,7 @@ export class MirrorDataSource {
       // Sessions can appear mid-initialization with no sessionId yet; skip
       // those — a topic without a stable id is unusable downstream.
       if (typeof s.sessionId !== 'string' || s.sessionId.length === 0) continue
-      if (!isTopicVisible(s.sessionId, this.rules)) continue
+      if (!isTopicVisible(s.sessionId, rules)) continue
       seen.add(s.sessionId)
       // Hide live sessions that haven't seen a user message yet — matches
       // the cold-topic rule and keeps sidebar entries meaningful. We don't
@@ -166,7 +176,7 @@ export class MirrorDataSource {
           persisted
             .filter((p) => {
               const sid = p.header.id
-              return !seen.has(sid) && isTopicVisible(sid, this.rules)
+              return !seen.has(sid) && isTopicVisible(sid, rules)
             })
             .map(async (p): Promise<MirrorTopic | null> => {
               const sid = p.header.id
@@ -238,7 +248,7 @@ export class MirrorDataSource {
   }
 
   async getEvents(sessionId: string): Promise<MirrorEvent[]> {
-    if (!isTopicVisible(sessionId, this.rules)) {
+    if (!isTopicVisible(sessionId, this.getRules())) {
       return []
     }
 
@@ -287,6 +297,8 @@ export class MirrorDataSource {
    * event batch, so this is a two-pass scan.
    */
   private filterEvents(events: MirrorEvent[]): MirrorEvent[] {
+    // Snapshot once: one batch must be filtered by one consistent ruleset.
+    const rules = this.getRules()
     // Pass 1: build callId → toolName from tool/call events.
     const toolByCallId = new Map<string, string>()
     for (const ev of events) {
@@ -302,13 +314,13 @@ export class MirrorDataSource {
     for (const original of events) {
       let ev = original
       // Stage 1: event-kind filter.
-      if (!isEventKindVisible(ev.kind, this.rules)) continue
+      if (!isEventKindVisible(ev.kind, rules)) continue
 
       // Stage 2: tool-name filter.
       if (ev.kind === 'tool/call') {
         const data = ev.data as { name?: unknown } | null | undefined
         const name = data && typeof data.name === 'string' ? data.name : ''
-        const vis = toolVisibility(name, this.rules)
+        const vis = toolVisibility(name, rules)
         if (vis.hidden) continue
         if (vis.hideCall) {
           ev = { ...ev, data: { ...(data as Record<string, unknown>), arguments: '[hidden by mirror config]' } }
@@ -318,7 +330,7 @@ export class MirrorDataSource {
         const callId = data?.message?.source?.callId
         const toolName = typeof callId === 'string' ? toolByCallId.get(callId) : undefined
         if (toolName && data) {
-          const vis = toolVisibility(toolName, this.rules)
+          const vis = toolVisibility(toolName, rules)
           if (vis.hidden) continue
           if (vis.hideResult) {
             ev = { ...ev, data: { ...(data as Record<string, unknown>), message: { ...(data.message as Record<string, unknown>), content: [{ type: 'text', text: '[hidden by mirror config]' }] } } }
@@ -327,8 +339,8 @@ export class MirrorDataSource {
       }
 
       // Stage 3: redaction.
-      if (this.rules.redact.length > 0) {
-        ev = { ...ev, data: redactDeep(ev.data, this.rules) }
+      if (rules.redact.length > 0) {
+        ev = { ...ev, data: redactDeep(ev.data, rules) }
       }
 
       out.push(ev)

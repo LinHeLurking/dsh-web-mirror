@@ -118,3 +118,14 @@ export function InboxIcon(props: IconProps) {
     </Svg>
   )
 }
+
+/** Sliders glyph for the settings entry point. */
+export function SettingsIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M1.75 5h12.5M1.75 11h12.5" />
+      <circle cx="5.5" cy="5" r="1.75" />
+      <circle cx="10.5" cy="11" r="1.75" />
+    </Svg>
+  )
+}

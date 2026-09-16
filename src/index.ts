@@ -1,6 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { Config, compileFilterRules } from './config.js'
+import { Config } from './config.js'
 import { MirrorDataSource } from './adapter.js'
+import { MirrorConfigStore } from './runtime-config.js'
 import { MirrorServer } from './server.js'
 
 export const name = '@moonshot-ai/dsh-web-mirror'
@@ -13,9 +14,11 @@ export const inject = [
 ]
 
 export function apply(ctx: Context, config: Config): void {
-  const rules = compileFilterRules(config)
-  const source = new MirrorDataSource(ctx, rules)
-  const server = new MirrorServer(config, source, rules)
+  // The store owns the effective filter config: cordis yaml is the base,
+  // UI edits via PUT /config layer on top and persist to a JSON file.
+  const store = new MirrorConfigStore(config)
+  const source = new MirrorDataSource(ctx, () => store.rules)
+  const server = new MirrorServer(store, source)
 
   // Listener lifecycle — copied from the DSH webserver pattern
   // (packages/host/webserver/src/index.ts:304). Full dispose + re-apply

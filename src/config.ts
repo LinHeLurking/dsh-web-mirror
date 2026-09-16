@@ -98,7 +98,7 @@ export interface FilterRules {
  * `show` rules always win over this list, so a user can re-expose any of
  * them explicitly.
  */
-const DEFAULT_HIDDEN_EVENT_KINDS = [
+export const DEFAULT_HIDDEN_EVENT_KINDS = [
   '^reasoning$',
   '^thinking$',
   '^approval/asked$',
@@ -115,7 +115,7 @@ const DEFAULT_HIDDEN_EVENT_KINDS = [
  * deliberately narrow — broad patterns (e.g. any 32-char hex) would nuke
  * legitimate content like commit hashes.
  */
-const DEFAULT_REDACT_RULES: Array<{ pattern: string; replace: string }> = [
+export const DEFAULT_REDACT_RULES: Array<{ pattern: string; replace: string }> = [
   { pattern: 'sk-[A-Za-z0-9_-]{20,}', replace: '[REDACTED_API_KEY]' },
   { pattern: 'ghp_[A-Za-z0-9]{20,}', replace: '[REDACTED_GITHUB_TOKEN]' },
   { pattern: 'gho_[A-Za-z0-9]{20,}', replace: '[REDACTED_GITHUB_TOKEN]' },

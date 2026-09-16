@@ -835,6 +835,224 @@ button {
   color: var(--red);
 }
 
+/* ----------------------------------------------------------- settings --- */
+.sidebar-header-actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(31, 35, 40, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh var(--sp-4) var(--sp-4);
+}
+
+.modal {
+  background: var(--bg-0);
+  border: 1px solid var(--border-0);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  width: 100%;
+  max-width: 640px;
+  max-height: 84vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--border-0);
+}
+.modal-header h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.modal-body {
+  padding: var(--sp-3) var(--sp-4);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.modal-footer {
+  border-top: 1px solid var(--border-0);
+  padding: var(--sp-3) var(--sp-4);
+}
+.modal-actions {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: center;
+}
+.modal-actions-spacer {
+  flex: 1;
+}
+
+.btn {
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid var(--border-0);
+  border-radius: var(--radius-md);
+  background: var(--bg-0);
+  color: var(--fg-0);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  background: var(--bg-2);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-fg);
+}
+
+.settings-section {
+  margin-bottom: var(--sp-5);
+}
+.settings-section h3 {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.settings-caption {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+}
+.settings-note {
+  color: var(--fg-1);
+  font-size: var(--text-sm);
+}
+
+.settings-field {
+  display: block;
+  margin-bottom: var(--sp-3);
+}
+.settings-label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  margin-bottom: var(--sp-1);
+}
+.settings-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--sp-2);
+  border: 1px solid var(--border-0);
+  border-radius: var(--radius-md);
+  background: var(--bg-1);
+  color: var(--fg-0);
+  resize: vertical;
+}
+.settings-field textarea:focus {
+  outline: 2px solid var(--accent-border);
+  outline-offset: -1px;
+}
+.settings-field small {
+  display: block;
+  margin-top: var(--sp-1);
+  color: var(--fg-2);
+  font-size: var(--text-xs);
+}
+
+.settings-check {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: flex-start;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.settings-check input {
+  margin-top: 2px;
+}
+.settings-check small {
+  display: block;
+  color: var(--fg-2);
+  font-size: var(--text-xs);
+}
+
+.settings-link {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: var(--sp-2);
+  color: var(--accent-fg);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.settings-link:hover {
+  text-decoration: underline;
+}
+
+.settings-defaults {
+  margin-top: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  background: var(--bg-1);
+  border: 1px solid var(--border-0);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+}
+.settings-defaults ul {
+  margin: 0 0 var(--sp-2);
+  padding-left: var(--sp-5);
+}
+
+.redact-row {
+  display: flex;
+  gap: var(--sp-2);
+  margin-bottom: var(--sp-2);
+  align-items: center;
+}
+.redact-row input {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border-0);
+  border-radius: var(--radius-md);
+  background: var(--bg-1);
+  color: var(--fg-0);
+}
+.redact-row .icon-btn {
+  flex: none;
+}
+
+.settings-errors {
+  margin: 0 0 var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  list-style: none;
+  background: var(--red-soft);
+  border: 1px solid var(--red);
+  border-radius: var(--radius-md);
+  color: var(--red);
+  font-size: var(--text-xs);
+}
+
+.settings-meta {
+  font-size: var(--text-xs);
+  color: var(--fg-2);
+}
+.settings-meta p {
+  margin: 0 0 var(--sp-1);
+}
+
 /* --------------------------------------------------------- responsive --- */
 @media (max-width: 720px) {
   .shell {

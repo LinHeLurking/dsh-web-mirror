@@ -1,23 +1,36 @@
 import type { MirrorDataSource } from './adapter.js';
-import type { Config, FilterRules } from './config.js';
+import type { MirrorConfigStore } from './runtime-config.js';
 /**
- * Read-only mirror HTTP server on its own port. No auth, no write paths.
- * Only GET handlers are registered — there is no mechanism to mutate
- * anything through this surface.
+ * Mirror HTTP server on its own port. Session data is read-only; the only
+ * write surface is /config, which mutates the mirror's own filter settings
+ * (never DSH state) and persists them to a JSON file in the user's home.
  */
 export declare class MirrorServer {
-    private config;
+    private store;
     private source;
-    private rules;
     private server;
     private sseClients;
-    constructor(config: Config, source: MirrorDataSource, rules: FilterRules);
+    constructor(store: MirrorConfigStore, source: MirrorDataSource);
     listen(): Promise<void>;
     private handle;
     /** Serve the vite-built index.html, which references the hashed assets. */
     private serveIndex;
     private serveStatic;
     private handleTopics;
+    /**
+     * GET /config — the effective editable config plus the read-only context
+     * the settings UI needs: listen address, the persisted-overrides file
+     * location, and the built-in defaults (so the UI can display them).
+     */
+    private handleGetConfig;
+    /**
+     * PUT /config — validate and apply a partial editable-config update.
+     * Takes effect immediately (the rules getter is re-read per request)
+     * and persists to the overrides file so it survives restarts.
+     */
+    private handlePutConfig;
+    /** POST /config/reset — drop UI overrides, revert to the yaml config. */
+    private handleResetConfig;
     private handleHistory;
     private handleEvents;
     /** Notify SSE clients that a topic has new data. */

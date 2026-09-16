@@ -64,6 +64,25 @@ export interface FilterRules {
     }>;
     sensitiveDefaults: boolean;
 }
+/**
+ * Event kinds hidden by default when `sensitiveDefaults` is on. These are
+ * the kinds that routinely carry internal state — chain-of-thought,
+ * approval prompts with full tool args, subagent model catalogs — and are
+ * rarely what a mirror consumer wants to see.
+ *
+ * `show` rules always win over this list, so a user can re-expose any of
+ * them explicitly.
+ */
+export declare const DEFAULT_HIDDEN_EVENT_KINDS: string[];
+/**
+ * Token shapes redacted by default when `sensitiveDefaults` is on. Kept
+ * deliberately narrow — broad patterns (e.g. any 32-char hex) would nuke
+ * legitimate content like commit hashes.
+ */
+export declare const DEFAULT_REDACT_RULES: Array<{
+    pattern: string;
+    replace: string;
+}>;
 export declare function compileFilterRules(config: Config): FilterRules;
 export declare function isTopicVisible(topicId: string, rules: FilterRules): boolean;
 /**
