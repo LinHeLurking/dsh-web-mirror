@@ -52,6 +52,15 @@ interface SlotRegistration {
 
 interface SlotsService {
   register<T>(registration: SlotRegistration, component: T): () => void
+  /**
+   * Defer a registration until the named slot is declared. Slots are
+   * declared by a parent entry's `children` table (here: the settings
+   * page's configurable tab declares `settings.plugin.item` when IT
+   * registers), so registering eagerly from `apply` races the declaration
+   * and throws "slot is not declared". The callback may return one
+   * disposer or yield several via a generator.
+   */
+  inject(name: string, callback: () => void | (() => void) | Generator<(() => void) | void, void, void>): void
 }
 
 declare module '@deepseek-ai/cordis' {
@@ -133,12 +142,18 @@ export function apply(ctx: Context): void {
   injectMirrorCardStyles()
   const scope = ctx.settingsScope!.bind<MirrorSettings>({ namespace: MIRROR_SETTINGS_NS })
   const controller = new MirrorCardController(scope)
-  ctx.effect(() => {
-    const registration: SlotRegistration = {
-      name: 'settings.plugin.item',
-      key: MIRROR_SETTINGS_NS,
-      inject: () => controller.inject(),
-    }
-    return ctx.slots!.register(registration, MirrorCardSlot)
-  }, 'web-mirror: settings card')
+  // Defer until the settings page's configurable tab declares the slot —
+  // see SlotsService.inject above. Registering eagerly here crashed plugin
+  // boot with "slot settings.plugin.item is not declared" whenever this
+  // plugin's client half materialized before the tab's registration.
+  ctx.slots!.inject('settings.plugin.item', () =>
+    ctx.slots!.register(
+      {
+        name: 'settings.plugin.item',
+        key: MIRROR_SETTINGS_NS,
+        inject: () => controller.inject(),
+      },
+      MirrorCardSlot,
+    ),
+  )
 }
