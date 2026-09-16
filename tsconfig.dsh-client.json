@@ -1,0 +1,9 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["src/dsh-client/**/*", "src/settings.ts"],
+  "exclude": ["node_modules", "lib", "dist"]
+}

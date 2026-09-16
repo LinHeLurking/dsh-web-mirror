@@ -29,25 +29,3 @@ export interface HistoryResponse {
   topicId: string
   events: MirrorEvent[]
 }
-
-/** Runtime-editable mirror filter config (mirrors server EditableConfig). */
-export interface EditableConfig {
-  include: string[]
-  exclude: string[]
-  events: { hide: string[]; show: string[] }
-  tools: { hide: string[]; hideCalls: string[]; hideResults: string[] }
-  redact: Array<{ pattern: string; replace: string }>
-  sensitiveDefaults: boolean
-}
-
-/** GET /config response. */
-export interface ConfigResponse {
-  config: EditableConfig
-  host: string
-  port: number
-  configFile: string
-  defaults: {
-    hiddenEventKinds: string[]
-    redactRules: Array<{ pattern: string; replace: string }>
-  }
-}

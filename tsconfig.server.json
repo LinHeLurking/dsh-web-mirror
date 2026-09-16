@@ -10,5 +10,5 @@
     "incremental": false
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["src/client/**/*", "node_modules", "lib", "dist"]
+  "exclude": ["src/client/**/*", "src/dsh-client/**/*", "node_modules", "lib", "dist"]
 }

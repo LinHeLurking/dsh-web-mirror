@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ConfigResponse, EditableConfig, HistoryResponse, MirrorEvent, TopicsResponse } from './types.js'
+import type { HistoryResponse, MirrorEvent, TopicsResponse } from './types.js'
 
 /** GET /topics — workspace + session index. */
 export async function fetchTopics(signal?: AbortSignal): Promise<TopicsResponse> {
@@ -18,38 +18,6 @@ export async function fetchHistory(topicId: string, afterSeq?: number, signal?: 
   const res = await fetch(url, signal ? { signal } : undefined)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return (await res.json()) as HistoryResponse
-}
-
-/** GET /config — effective editable config + read-only context. */
-export async function fetchConfig(): Promise<ConfigResponse> {
-  const res = await fetch('/config')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return (await res.json()) as ConfigResponse
-}
-
-export interface SaveConfigResult {
-  ok: boolean
-  errors: string[]
-}
-
-/** PUT /config — partial update; returns validation errors when rejected. */
-export async function saveConfig(patch: Partial<EditableConfig>): Promise<SaveConfigResult> {
-  const res = await fetch('/config', {
-    method: 'PUT',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(patch),
-  })
-  if (res.ok) return { ok: true, errors: [] }
-  const body = (await res.json().catch(() => null)) as { errors?: string[] } | null
-  return { ok: false, errors: body?.errors ?? [`HTTP ${res.status}`] }
-}
-
-/** POST /config/reset — drop UI overrides, revert to the yaml config. */
-export async function resetConfig(): Promise<SaveConfigResult> {
-  const res = await fetch('/config/reset', { method: 'POST' })
-  if (res.ok) return { ok: true, errors: [] }
-  const body = (await res.json().catch(() => null)) as { errors?: string[] } | null
-  return { ok: false, errors: body?.errors ?? [`HTTP ${res.status}`] }
 }
 
 export interface SessionEventsState {

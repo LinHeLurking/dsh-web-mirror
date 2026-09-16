@@ -1,9 +1,10 @@
 import type { MirrorDataSource } from './adapter.js';
 import type { MirrorConfigStore } from './runtime-config.js';
 /**
- * Mirror HTTP server on its own port. Session data is read-only; the only
- * write surface is /config, which mutates the mirror's own filter settings
- * (never DSH state) and persists them to a JSON file in the user's home.
+ * Read-only mirror HTTP server on its own port. Only GET handlers are
+ * registered — filter configuration lives in DSH's own settings (the
+ * `web-mirror` namespace), edited through the DSH web settings page,
+ * never through this surface.
  */
 export declare class MirrorServer {
     private store;
@@ -18,19 +19,11 @@ export declare class MirrorServer {
     private serveStatic;
     private handleTopics;
     /**
-     * GET /config — the effective editable config plus the read-only context
-     * the settings UI needs: listen address, the persisted-overrides file
-     * location, and the built-in defaults (so the UI can display them).
+     * GET /config — read-only view of the effective filter config and the
+     * built-in defaults, for display. Writes happen exclusively through the
+     * DSH settings page (the `web-mirror` settings namespace).
      */
     private handleGetConfig;
-    /**
-     * PUT /config — validate and apply a partial editable-config update.
-     * Takes effect immediately (the rules getter is re-read per request)
-     * and persists to the overrides file so it survives restarts.
-     */
-    private handlePutConfig;
-    /** POST /config/reset — drop UI overrides, revert to the yaml config. */
-    private handleResetConfig;
     private handleHistory;
     private handleEvents;
     /** Notify SSE clients that a topic has new data. */

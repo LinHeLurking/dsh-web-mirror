@@ -1,4 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis';
+import '@deepseek-ai/dsh-settings';
 import { Config } from './config.js';
 export declare const name = "@moonshot-ai/dsh-web-mirror";
 export { Config };
