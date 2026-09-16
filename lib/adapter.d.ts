@@ -101,6 +101,22 @@ export declare class MirrorDataSource {
      */
     private analyzeColdSession;
     getEvents(sessionId: string): Promise<MirrorEvent[]>;
+    /**
+     * Server-side filter pipeline applied to every event before it crosses
+     * the wire. Three stages, in order:
+     *
+     * 1. Event-kind filter — drops entire events whose kind matches the
+     *    configured hide list (or the built-in sensitive defaults).
+     * 2. Tool-name filter — for tool/call and tool/result events, looks up
+     *    the tool name and either drops the event entirely, blanks the call
+     *    payload, or blanks the result body.
+     * 3. Redaction — applies every configured regex replacement to all
+     *    string values inside the event's data payload.
+     *
+     * The tool-name lookup requires a callId→name map built from the same
+     * event batch, so this is a two-pass scan.
+     */
+    private filterEvents;
 }
 export {};
 //# sourceMappingURL=adapter.d.ts.map

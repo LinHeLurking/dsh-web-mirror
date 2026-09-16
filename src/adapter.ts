@@ -1,7 +1,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { MirrorEvent, MirrorTopic, MirrorWorkspace } from './types.js'
 import type { FilterRules } from './config.js'
-import { isTopicVisible } from './config.js'
+import { isEventKindVisible, isTopicVisible, redactText, toolVisibility } from './config.js'
 
 /**
  * Upstream types — narrowed to what the mirror actually consumes.
@@ -244,7 +244,7 @@ export class MirrorDataSource {
 
     const live = this.ctx.sessions?.get(sessionId)
     if (live) {
-      return live.snapshotEvents().map(wireToMirror)
+      return this.filterEvents(live.snapshotEvents().map(wireToMirror))
     }
 
     const persistence = this.ctx.sessionPersistence
@@ -253,7 +253,7 @@ export class MirrorDataSource {
       try {
         handle = await persistence.open(sessionId, 'read')
         const { events } = await handle.read()
-        return events.map(wireToMirror)
+        return this.filterEvents(events.map(wireToMirror))
       } catch {
         return []
       } finally {
@@ -270,6 +270,71 @@ export class MirrorDataSource {
     }
     return []
   }
+
+  /**
+   * Server-side filter pipeline applied to every event before it crosses
+   * the wire. Three stages, in order:
+   *
+   * 1. Event-kind filter — drops entire events whose kind matches the
+   *    configured hide list (or the built-in sensitive defaults).
+   * 2. Tool-name filter — for tool/call and tool/result events, looks up
+   *    the tool name and either drops the event entirely, blanks the call
+   *    payload, or blanks the result body.
+   * 3. Redaction — applies every configured regex replacement to all
+   *    string values inside the event's data payload.
+   *
+   * The tool-name lookup requires a callId→name map built from the same
+   * event batch, so this is a two-pass scan.
+   */
+  private filterEvents(events: MirrorEvent[]): MirrorEvent[] {
+    // Pass 1: build callId → toolName from tool/call events.
+    const toolByCallId = new Map<string, string>()
+    for (const ev of events) {
+      if (ev.kind !== 'tool/call') continue
+      const data = ev.data as { callId?: unknown; name?: unknown } | null | undefined
+      if (data && typeof data.callId === 'string' && typeof data.name === 'string') {
+        toolByCallId.set(data.callId, data.name)
+      }
+    }
+
+    // Pass 2: filter + redact.
+    const out: MirrorEvent[] = []
+    for (const original of events) {
+      let ev = original
+      // Stage 1: event-kind filter.
+      if (!isEventKindVisible(ev.kind, this.rules)) continue
+
+      // Stage 2: tool-name filter.
+      if (ev.kind === 'tool/call') {
+        const data = ev.data as { name?: unknown } | null | undefined
+        const name = data && typeof data.name === 'string' ? data.name : ''
+        const vis = toolVisibility(name, this.rules)
+        if (vis.hidden) continue
+        if (vis.hideCall) {
+          ev = { ...ev, data: { ...(data as Record<string, unknown>), arguments: '[hidden by mirror config]' } }
+        }
+      } else if (ev.kind === 'tool/result') {
+        const data = ev.data as { message?: { source?: { callId?: unknown } } } | null | undefined
+        const callId = data?.message?.source?.callId
+        const toolName = typeof callId === 'string' ? toolByCallId.get(callId) : undefined
+        if (toolName && data) {
+          const vis = toolVisibility(toolName, this.rules)
+          if (vis.hidden) continue
+          if (vis.hideResult) {
+            ev = { ...ev, data: { ...(data as Record<string, unknown>), message: { ...(data.message as Record<string, unknown>), content: [{ type: 'text', text: '[hidden by mirror config]' }] } } }
+          }
+        }
+      }
+
+      // Stage 3: redaction.
+      if (this.rules.redact.length > 0) {
+        ev = { ...ev, data: redactDeep(ev.data, this.rules) }
+      }
+
+      out.push(ev)
+    }
+    return out
+  }
 }
 
 function wireToMirror(wire: SessionWireEvent): MirrorEvent {
@@ -279,4 +344,23 @@ function wireToMirror(wire: SessionWireEvent): MirrorEvent {
     kind: wire.type,
     data: wire.data,
   }
+}
+
+/**
+ * Recursively walk a JSON-shaped value and apply `redactText` to every
+ * string leaf. Objects and arrays are rebuilt; primitives pass through.
+ * This is the catch-all safety net — it doesn't need to know the event
+ * schema, just "if it's a string, redact it."
+ */
+function redactDeep(value: unknown, rules: FilterRules): unknown {
+  if (typeof value === 'string') return redactText(value, rules)
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v, rules))
+  if (value !== null && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = redactDeep(v, rules)
+    }
+    return out
+  }
+  return value
 }
